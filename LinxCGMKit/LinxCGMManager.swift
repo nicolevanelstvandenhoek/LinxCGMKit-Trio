@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import LoopAlgorithm
 import LoopKit
 import os.log
 #if canImport(UIKit)
@@ -134,8 +135,22 @@ public class LinxCGMManager: CGMManager {
     public var glucoseDisplay: GlucoseDisplayable? { latestDisplay }
 
     public var cgmManagerStatus: CGMManagerStatus {
-        CGMManagerStatus(hasValidSensorSession: true, device: device)
+        CGMManagerStatus(
+            hasValidSensorSession: true,
+            inSensorWarmup: false,
+            isInoperable: isInoperable,
+            lastCommunicationDate: state.latestReadingDate,
+            device: device
+        )
     }
+
+    /// No reading for 15 minutes, as the signal-lost status highlight shows.
+    public var inSignalLoss: Bool {
+        guard let last = state.latestReadingDate else { return false }
+        return last.timeIntervalSinceNow < -(15 * 60)
+    }
+
+    public var isInoperable: Bool { false }
 
     public var device: HKDevice? {
         HKDevice(
@@ -151,6 +166,8 @@ public class LinxCGMManager: CGMManager {
     }
 
     public static let pluginIdentifier: String = "LinxCGMManager"
+
+    public var pluginIdentifier: String { Self.pluginIdentifier }
 
     public let localizedTitle = "DiaExpert Sensor 2"
 
@@ -235,12 +252,7 @@ public class LinxCGMManager: CGMManager {
         completion(.noData)
     }
 
-    public func acknowledgeAlert(
-        alertIdentifier _: Alert.AlertIdentifier,
-        completion: @escaping (Error?) -> Void
-    ) {
-        completion(nil)
-    }
+    public func acknowledgeAlert(alertIdentifier _: Alert.AlertIdentifier) async throws {}
 
     public func getSoundBaseURL() -> URL? { nil }
     public func getSounds() -> [Alert.Sound] { [] }
@@ -252,8 +264,10 @@ public class LinxCGMManager: CGMManager {
     public func notifyDelegateOfDeletion(completion: @escaping () -> Void) {
         scanner.stop()
         delegateQueue?.async {
-            self.cgmManagerDelegate?.cgmManagerWantsDeletion(self)
-            completion()
+            Task {
+                await self.cgmManagerDelegate?.cgmManagerWantsDeletion(self)
+                completion()
+            }
         }
     }
 
@@ -335,7 +349,7 @@ public class LinxCGMManager: CGMManager {
     /// Last trend we computed ourselves (from delta).
     private var lastComputedTrend: GlucoseTrend = .flat
     /// Last trend rate we computed ourselves (mg/dL/min).
-    private var lastComputedTrendRate: HKQuantity?
+    private var lastComputedTrendRate: LoopQuantity?
 
     /// A changed curve must take effect on the next value without being blended
     /// with samples produced by the previous curve. Keep the Loop cadence intact.
@@ -390,7 +404,7 @@ public class LinxCGMManager: CGMManager {
     /// and GlucoseTrend from it — same as Dexcom/Libre.
     /// Thresholds follow Dexcom conventions.
     private func computeTrend(currentMgdl: Int, currentDate: Date)
-        -> (trend: GlucoseTrend, rate: HKQuantity?)
+        -> (trend: GlucoseTrend, rate: LoopQuantity?)
     {
         guard let prevValue = lastSampleValue, let prevAt = lastSampleSentAt else {
             // No previous value → cannot compute trend yet.
@@ -403,8 +417,8 @@ public class LinxCGMManager: CGMManager {
         }
         // mg/dL per minute.
         let ratePerMin = Double(currentMgdl - prevValue) / elapsedMin
-        let rateQuantity = HKQuantity(
-            unit: HKUnit(from: "mg/dL").unitDivided(by: .minute()),
+        let rateQuantity = LoopQuantity(
+            unit: .milligramsPerDeciliterPerMinute,
             doubleValue: ratePerMin
         )
         let trend: GlucoseTrend
@@ -461,10 +475,10 @@ extension LinxCGMManager: LinxScannerDelegate {
             return
         }
 
-        let unit = HKUnit(from: "mg/dL")
+        let unit = LoopUnit.milligramsPerDeciliter
         // Pass the SMOOTHED value to Loop (more stable while moving).
         let clamped = min(max(smoothed, 40), 400)
-        let quantity = HKQuantity(unit: unit, doubleValue: Double(clamped))
+        let quantity = LoopQuantity(unit: unit, doubleValue: Double(clamped))
 
         // OWN trend calculation: from delta of previous and current (Loop-passed)
         // values — BEFORE updating lastSample* fields.
@@ -567,12 +581,12 @@ extension LinxCGMManager: LinxScannerDelegate {
 public struct LinxGlucoseDisplay: GlucoseDisplayable {
     private let reading: LinxGlucoseReading
     private let computedTrend: GlucoseTrend
-    private let computedTrendRate: HKQuantity?
+    private let computedTrendRate: LoopQuantity?
 
     public init(
         reading: LinxGlucoseReading,
         trend: GlucoseTrend,
-        trendRate: HKQuantity?
+        trendRate: LoopQuantity?
     ) {
         self.reading = reading
         computedTrend = trend
@@ -582,7 +596,7 @@ public struct LinxGlucoseDisplay: GlucoseDisplayable {
     public var isStateValid: Bool { true }
     /// Show HUD arrow from our computed trend (not the sensor bit).
     public var trendType: GlucoseTrend? { computedTrend }
-    public var trendRate: HKQuantity? { computedTrendRate }
+    public var trendRate: LoopQuantity? { computedTrendRate }
     public var isLocal: Bool { true }
     public var glucoseRangeCategory: GlucoseRangeCategory? { nil }
 }

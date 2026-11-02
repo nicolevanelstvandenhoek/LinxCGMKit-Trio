@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import HealthKit
+import LoopAlgorithm
 import LinxCGMKit
 import LoopKit
 import LoopKitUI
@@ -54,15 +55,15 @@ class LinxSettingsViewModel: ObservableObject, LinxStateObserver {
         displayGlucosePreference: DisplayGlucosePreference
     ) -> String {
         guard let r = r else { return "—" }
-        let quantity = HKQuantity(
-            unit: HKUnit(from: "mg/dL"),
+        let quantity = LoopQuantity(
+            unit: .milligramsPerDeciliter,
             doubleValue: Double(r.glucoseMgdl)
         )
         return displayGlucosePreference.format(quantity)
     }
 
     private var displaysMgdl: Bool {
-        displayGlucosePreference.unit == HKUnit(from: "mg/dL")
+        displayGlucosePreference.unit == .milligramsPerDeciliter
     }
 
     var calibrationInputPlaceholder: String {
