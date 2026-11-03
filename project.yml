@@ -2,7 +2,7 @@ name: LinxCGMKit
 options:
   bundleIdPrefix: org.loopkit
   deploymentTarget:
-    iOS: "15.1"
+    iOS: "17.6"
   createIntermediateGroups: true
   defaultConfig: Release
 
