@@ -1,6 +1,5 @@
 import Foundation
 import HealthKit
-import LoopAlgorithm
 import LoopKit
 import os.log
 #if canImport(UIKit)

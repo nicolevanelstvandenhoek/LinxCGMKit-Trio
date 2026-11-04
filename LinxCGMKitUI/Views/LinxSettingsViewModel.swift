@@ -1,7 +1,6 @@
 import Combine
 import Foundation
 import HealthKit
-import LoopAlgorithm
 import LinxCGMKit
 import LoopKit
 import LoopKitUI
