@@ -55,12 +55,11 @@ class LinxUICoordinator: UINavigationController, CGMManagerOnboarding, Completio
                 self.completionDelegate?.completionNotifyingDidComplete(self)
             },
             deleteCGM: { [weak self] in
-                self?.cgmManager?.notifyDelegateOfDeletion {
-                    DispatchQueue.main.async {
-                        guard let self = self else { return }
-                        self.completionDelegate?.completionNotifyingDidComplete(self)
-                        self.dismiss(animated: true)
-                    }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await self.cgmManager?.delete()
+                    self.completionDelegate?.completionNotifyingDidComplete(self)
+                    self.dismiss(animated: true)
                 }
             }
         )

@@ -256,18 +256,13 @@ public class LinxCGMManager: CGMManager {
     public func getSoundBaseURL() -> URL? { nil }
     public func getSounds() -> [Alert.Sound] { [] }
 
-    /// Loop calls this on CGM deletion. First stop the scanner and release
-    /// CBCentralManager so a later re-add starts from a clean state (otherwise the old
-    /// BLE manager and the new one can collide due to shared State Restoration ID →
-    /// "does not support BLE" error).
-    public func notifyDelegateOfDeletion(completion: @escaping () -> Void) {
+    /// Deletes the CGM. First stop the scanner and release CBCentralManager so a later
+    /// re-add starts from a clean state (otherwise the old BLE manager and the new one can
+    /// collide due to shared State Restoration ID → "does not support BLE" error), then ask
+    /// the host to remove the manager. Returns once it has.
+    public func delete() async {
         scanner.stop()
-        delegateQueue?.async {
-            Task {
-                await self.cgmManagerDelegate?.cgmManagerWantsDeletion(self)
-                completion()
-            }
-        }
+        await cgmManagerDelegate?.cgmManagerWantsDeletion(self)
     }
 
     // MARK: - Private
